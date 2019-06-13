@@ -1,0 +1,5 @@
+"","apgar_1min","mother_age","father_race","plurality"
+"apgar_1min",1,0,0,0
+"mother_age",0,1,0,0
+"father_race",0,0,1,0
+"plurality",0,0,0,1
