@@ -1,6 +1,11 @@
 library(tidyverse)
 library(lubridate)
 library(bigrquery)
+library(dplyr)
+library(forcats)
+library(ggplot2)
+library(car)
+library(varhandle)
 project <- "diesel-bee-242813"
 sql <- "SELECT apgar_5min, ever_born, year, month, day, gestation_weeks, apgar_1min, plurality, cigarette_use, alcohol_use, wday, source_year, mother_age, father_race, drinks_per_week, mother_married FROM [publicdata:samples.natality]"
 query_exec(sql, project = project)
@@ -28,7 +33,7 @@ ggplot(temp, aes(x=date, y=Avg.baby3)) +
 tabble2 <-
   tibble(date = seq.Date(from = ymd(19690101),
                          to   = ymd(20081231),
-                         by   = "day"),
+                         by   = "year"),
          year = year(date),
          day = day(date),
          month = month(date),
@@ -51,7 +56,7 @@ tabble3 <- select(
   apgar_1min,
   mother_age,
   father_race,
-  plurality,
+  plurality
 )
 write.csv(
   x = tabble3,
@@ -91,7 +96,6 @@ ggcorrplot(corr, hc.order = TRUE,
 dates <- seq.Date(from = ymd(19690101),
                   to   = ymd(20081231),
                   by   = "day")
-)
 dates <- unlist(dates, use.names = FALSE)
 dates <- as.Date('dates', tryFormats = c("%Y-%m-%d", "%Y/%m/%d"),
                  optional = FALSE)
