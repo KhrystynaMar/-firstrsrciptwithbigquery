@@ -1,0 +1,238 @@
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+library(tidyverse)
+library(reshape2)
+library(shinydashboard)
+library(shinycssloaders)
+library(dygraphs)
+library(cowplot)
+library(zoo)
+library(xts)
+library(timeSeries)
+library(data.table)
+library(profvis)
+library(DT)
+library(bigrquery)
+library(highcharter)
+library(scales)
+library(sunburstR)
+library(RColorBrewer)
+library(lubridate)
+library(ggplot2)
+library(plotly)
+library(car)
+library(forcats)
+library(varhandle)
+library(shinyBS)
+library(quantmod)
+library(randtests) 
+library(fractal)
+library(tseries)
+
+project <- "diesel-bee-242813"
+
+SQL_get_data <- 
+    "SELECT year,
+month, mother_age, born_dead,
+DATE(year, month, 1) as date,
+count(year) as children_number,
+sum(apgar_1min) as apgar_1min_cum,
+sum(apgar_5min) as apgar_5min_cum
+FROM `bigquery-public-data.samples.natality`
+group by year, month, born_dead, mother_age
+order by year, month, born_dead, mother_age
+    "
+
+SQL_get_data2 <- function()
+    
+{
+    "
+SELECT apgar_1min,
+mother_age,
+father_race,
+plurality
+FROM `bigquery-public-data.samples.natality`
+    "
+    
+}
+
+
+data1 <- SQL_get_data2()%>%
+    query_exec(project,
+               use_legacy_sql = F,
+               max_pages = Inf)%>%
+    tbl_df()
+
+tabble4 <- data1 %>% filter( apgar_1min > 1)
+corr <- round(cor(tabble4), 1)
+
+data <- SQL_get_data()%>%
+    query_exec(project,
+               use_legacy_sql = F,
+               max_pages = Inf)%>%
+    tbl_df()
+
+
+data <- ungroup(data)
+
+
+
+
+# browser()
+
+ui <- fluidPage(
+    
+    # Application title
+    titlePanel("Dashboard about the number of newborns in the United States from 1968 to 2008"),
+    
+    # Sidebar with a slider input for number of bins 
+    sidebarLayout(
+        sidebarPanel(
+            dateRangeInput('dateRange',
+                           'Date range:',
+                           start = '2000-01-01',
+                           end = '2008-12-01',
+                           min = data%>%pull(date)%>%min(),
+                           max = data%>%pull(date)%>%max(),
+                           startview = "month",
+                           format = "yyyy-mm")
+        ),
+        
+        # Show a plot of the generated distribution
+        mainPanel(
+            plotlyOutput("distPlot"),
+            plotlyOutput("distPlotMonthly"),
+            plotlyOutput("BornDead"),
+            plotlyOutput("distCor")
+        )
+    )
+)
+
+
+
+
+
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+    
+    
+    
+    dataFilter <- reactive({
+        data%>%
+            filter(date >= input$dateRange[1])%>%
+            filter(date <= input$dateRange[2])
+    })
+    
+    
+    dataMonthly <- reactive({
+        dataFilter()%>%
+            group_by(year,month,date)%>%
+            summarise(children_number = sum(children_number, na.rm = T))
+    })
+    
+    
+    output$distPlot <- renderPlotly({
+        
+        
+        # data <- dataFilter()
+        # 
+        # browser()
+        # generate bins based on input$bins from ui.R
+        ggplotly(    
+            dataMonthly()%>%
+                ggplot(aes(x = year, y = children_number))+
+                geom_bar(stat = "identity")+
+                ggtitle("Birth dynamics"))
+    })
+    
+    
+    output$distPlotMonthly <- renderPlotly({
+        print(
+            
+            ggplotly(    
+                dataMonthly()%>%
+                    mutate(year_f = factor(year))%>%
+                    ggplot(aes(x = year_f, y = children_number, fill = year_f))+
+                    geom_boxplot()+
+                    ggtitle("Yearly pattern")))
+    })
+    
+    dataBornDead <- reactive({
+        dataFilter()%>%
+            filter(!is.na(born_dead))%>%
+            group_by(mother_age,born_dead)%>%
+            summarise(born_dead_avg = sum(born_dead, na.rm = T)/sum(children_number,na.rm = T))
+    })
+    
+    output$BornDead <- renderPlotly({
+        
+        print(
+            ggplotly(    
+                dataBornDead()%>%
+                    select(mother_age, born_dead, born_dead_avg)%>%
+                    melt(id.vars = c("mother_age","born_dead"))%>%
+                    ggplot(aes(x = born_dead, y = value, fill = born_dead))+
+                    geom_boxplot()+
+                    facet_grid(variable~born_dead, scales = "free_y")+
+                    ggtitle("Bord dead pattern")))
+    })
+    
+    
+    output$distCor <- renderPlotly({
+        ggcorrplot(corr, hc.order = TRUE, 
+                   type = "lower", 
+                   lab = TRUE, 
+                   lab_size = 3, 
+                   method="circle", 
+                   colors = c("tomato2", "white", "springgreen3"), 
+                   title="Correlogram of mtcars", 
+                   ggtheme=theme_bw) 
+    })
+
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+
+
