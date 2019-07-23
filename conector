@@ -1,0 +1,29 @@
+project <- "diesel-bee-242813"
+
+SQL_get_data <- function()
+    
+{
+    "
+  SELECT year,
+  month, mother_age, born_dead,
+  DATE(year, month, 1) as date,
+  count(year) as children_number,
+  sum(apgar_1min) as apgar_1min_cum,
+  sum(apgar_5min) as apgar_5min_cum
+  FROM `bigquery-public-data.samples.natality`
+  group by year, month, born_dead, mother_age
+  order by year, month, born_dead, mother_age
+  "
+    
+}
+
+data <- SQL_get_data()%>%
+    query_exec(project,
+               use_legacy_sql = F,
+               max_pages = Inf)%>%
+    tbl_df()
+
+write.csv(
+    x = data,
+    file = "data.csv",
+    row.names = TRUE)
