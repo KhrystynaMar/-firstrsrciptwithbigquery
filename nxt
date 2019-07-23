@@ -1,0 +1,228 @@
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+library(tidyverse)
+library(reshape2)
+library(shinydashboard)
+library(shinycssloaders)
+library(dygraphs)
+library(cowplot)
+library(zoo)
+library(xts)
+library(timeSeries)
+library(data.table)
+library(profvis)
+library(DT)
+library(bigrquery)
+library(highcharter)
+library(scales)
+library(sunburstR)
+library(RColorBrewer)
+library(lubridate)
+library(ggplot2)
+library(plotly)
+library(car)
+library(forcats)
+library(varhandle)
+library(shinyBS)
+library(quantmod)
+library(randtests) 
+library(fractal)
+library(tseries)
+
+project <- "diesel-bee-242813"
+
+SQL_get_data <- function()
+  
+{
+  "
+  SELECT year,
+  month, mother_age, born_dead,
+  DATE(year, month, 1) as date,
+  count(year) as children_number,
+  sum(apgar_1min) as apgar_1min_cum,
+  sum(apgar_5min) as apgar_5min_cum
+  FROM `bigquery-public-data.samples.natality`
+  group by year, month, born_dead, mother_age
+  order by year, month, born_dead, mother_age
+  "
+  
+}
+
+data <- SQL_get_data()%>%
+  query_exec(project,
+             use_legacy_sql = F,
+             max_pages = Inf)%>%
+  tbl_df()
+
+
+data <- ungroup(data)
+
+
+
+
+# browser()
+
+ui <- dashboardPage(
+  # Глянь туториал по UI для дашбордов https://rstudio.github.io/shinydashboard/get_started.html
+  # Application title
+  # dashboardHeader(title = "Dashboard about the number of newborns in the United States from 1968 to 2008"),
+  dashboardHeader(title = "Dashboard about the number of newborns in the United States from 1968 to 2008"),
+  dashboardSidebar(
+    dateRangeInput('dateRange',
+                   'Date range:',
+                   start = '2000-01-01',
+                   end = '2008-12-01',
+                   min = data%>%pull(date)%>%min(),
+                   max = data%>%pull(date)%>%max(),
+                   startview = "month",
+                   format = "yyyy-mm")
+  ),
+  dashboardBody(
+    plotlyOutput("distPlot"),
+    plotlyOutput("distPlotMonthly"),
+    plotlyOutput("BornDead")
+  )
+  
+  # 
+  # # Sidebar with a slider input for number of bins 
+  # dashboardSidebar(
+  #     sidebarMenu(
+  #         dateRangeInput('dateRange',
+  #                        'Date range:',
+  #                        start = '2000-01-01',
+  #                        end = '2008-12-01',
+  #                        min = data%>%pull(date)%>%min(),
+  #                        max = data%>%pull(date)%>%max(),
+  #                        startview = "month",
+  #                        format = "yyyy-mm")
+  #     )
+  #     
+  #     # Show a plot of the generated distribution
+  #     # mainPanel(
+  #     #     plotlyOutput("distPlot"),
+  #     #     plotlyOutput("distPlotMonthly"),
+  #     #     plotlyOutput("BornDead")
+  #     # )
+  # )
+)
+
+
+
+
+
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+  
+  
+  
+  dataFilter <- reactive({
+    data%>%
+      filter(date >= input$dateRange[1])%>%
+      filter(date <= input$dateRange[2])
+  })
+  
+  
+  dataMonthly <- reactive({
+    dataFilter()%>%
+      group_by(year,date)%>%
+      summarise(children_number = sum(children_number, na.rm = T))
+  })
+  
+  
+  output$distPlot <- renderPlotly({
+    
+    
+    
+    # data <- dataFilter()
+    # 
+    
+    # generate bins based on input$bins from ui.R
+    ggplotly(    
+      dataMonthly()%>% ### В данных есть группировка по месяцу рождения, в графике она не используется. Вопрос нужна ли она тогда? Что хотели показать в графике? Показывать динамику ражденных за год. В идеале когда ты нажымеаш на год должна выпригивати динамика по месяцам
+        ggplot(aes(x = year, y = children_number))+
+        geom_bar(stat = "identity")+
+        ggtitle("Birth dynamics"))
+  })
+  
+  
+  output$distPlotMonthly <- renderPlotly({
+    # print( # Тут ты просто завтыкала убрать эту строку
+    # browser()
+    ggplotly(    
+      dataMonthly()%>%
+        mutate(year_f = factor(year))%>%
+        ggplot(aes(x = year_f, y = children_number, fill = year_f))+
+        geom_boxplot()+
+        ggtitle("Yearly pattern"))
+    # )
+  })
+  
+  dataBornDead <- reactive({
+    dataFilter()%>%  # Тут не понял логику вычислений, давай вернемся к основному: что хотели показать на графике? На какой вопрос хотели ответить? На вопрос сколько умерло детей по годам в соотношении до возраста матери
+      filter(!is.na(mother_age))%>%
+      group_by(born_dead)%>%
+      summarise(born_dead_avg = sum(born_dead, na.rm = T))
+  })
+  
+  output$BornDead <- renderPlotly({
+    
+    # browser()
+    
+    # print( # Тут ты просто завтыкала убрать эту строку
+    ggplotly(    
+      dataBornDead()%>%
+        select(mother_age, born_dead, born_dead_avg)%>%
+        melt(id.vars = c("mother_age","born_dead"))%>%
+        ggplot(aes(x = born_dead, y = value, fill = born_dead))+
+        geom_boxplot()+
+        facet_grid(variable~born_dead, scales = "free_y")+
+        ggtitle("Bord dead pattern"))
+    # )
+  })
+  
+  
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
